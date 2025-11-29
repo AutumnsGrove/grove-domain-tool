@@ -11,14 +11,30 @@ __email__ = "autumn@grove.place"
 from .checker import check_domain, check_domains, DomainResult
 from .pricing import get_domain_pricing, get_batch_pricing, DomainPrice, categorize_domains_by_pricing
 from .config import config
+from .orchestrator import (
+    DomainSearchOrchestrator,
+    SearchState,
+    SearchStatus,
+    DomainSearchResult,
+    quick_search,
+)
 
 __all__ = [
-    "check_domain", 
-    "check_domains", 
+    # Core checker
+    "check_domain",
+    "check_domains",
     "DomainResult",
+    # Pricing
     "get_domain_pricing",
-    "get_batch_pricing", 
+    "get_batch_pricing",
     "DomainPrice",
     "categorize_domains_by_pricing",
-    "config"
+    # Config
+    "config",
+    # Orchestrator
+    "DomainSearchOrchestrator",
+    "SearchState",
+    "SearchStatus",
+    "DomainSearchResult",
+    "quick_search",
 ]

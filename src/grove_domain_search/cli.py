@@ -15,6 +15,8 @@ from pathlib import Path
 from .checker import check_domain, check_domains, DomainResult
 from .pricing import get_domain_pricing, get_batch_pricing, categorize_domains_by_pricing
 from .config import config
+from .orchestrator import DomainSearchOrchestrator, SearchState, quick_search
+from .quiz.schema import InitialQuiz
 
 
 def format_domain_result(result: DomainResult, price_info=None) -> str:
@@ -171,7 +173,46 @@ def main():
         action="store_true",
         help="Suppress progress output"
     )
-    
+
+    # Search command (AI-powered)
+    search_parser = subparsers.add_parser("search", help="AI-powered domain search")
+    search_parser.add_argument(
+        "business_name",
+        help="Business or project name to find domains for"
+    )
+    search_parser.add_argument(
+        "--vibe",
+        choices=["professional", "creative", "minimal", "bold", "personal"],
+        default="professional",
+        help="Brand vibe (default: professional)"
+    )
+    search_parser.add_argument(
+        "--tlds",
+        nargs="+",
+        default=["com", "co", "io"],
+        help="Preferred TLDs (default: com co io)"
+    )
+    search_parser.add_argument(
+        "--keywords",
+        help="Additional keywords or themes"
+    )
+    search_parser.add_argument(
+        "--batches",
+        type=int,
+        default=2,
+        help="Number of batches to run (default: 2)"
+    )
+    search_parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Use mock AI (for testing without API key)"
+    )
+    search_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON"
+    )
+
     # Parse arguments
     args = parser.parse_args()
     
@@ -253,6 +294,57 @@ def main():
         
         # Run the async function
         asyncio.run(run_checks())
+
+    elif args.command == "search":
+        # AI-powered domain search
+        async def run_search():
+            print(f"\n🔍 Searching for domains for \"{args.business_name}\"...")
+            print(f"   Vibe: {args.vibe}")
+            print(f"   TLDs: {', '.join('.' + t for t in args.tlds)}")
+            if args.keywords:
+                print(f"   Keywords: {args.keywords}")
+            print(f"   Batches: {args.batches}")
+            print()
+
+            # Run the search
+            result = await quick_search(
+                business_name=args.business_name,
+                vibe=args.vibe,
+                tld_preferences=args.tlds,
+                keywords=args.keywords,
+                max_batches=args.batches,
+                use_mock=args.mock or True,  # Default to mock for now
+            )
+
+            # Create orchestrator for output formatting
+            orchestrator = DomainSearchOrchestrator(use_mock=True)
+
+            if args.json:
+                # JSON output
+                output = {
+                    "job_id": result.job_id,
+                    "status": result.status.value,
+                    "batch_num": result.batch_num,
+                    "quiz": result.quiz.to_dict() if result.quiz else None,
+                    "results_count": len(result.all_results),
+                    "good_count": result.good_count,
+                    "checked_domains": len(result.checked_domains),
+                    "available_domains": len(result.available_domains),
+                    "domains": [r.to_dict() for r in orchestrator.get_ranked_results(result)],
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                # Terminal-style output
+                print(orchestrator.format_results_terminal(result))
+
+                # Summary
+                print(f"Search Status: {result.status.value}")
+                print(f"Batches: {result.batch_num}")
+                print(f"Domains Checked: {len(result.checked_domains)}")
+                print(f"Available: {len(result.available_domains)}")
+                print(f"Good Results: {result.good_count}")
+
+        asyncio.run(run_search())
 
 
 if __name__ == "__main__":

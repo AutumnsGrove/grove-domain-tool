@@ -4,11 +4,11 @@
 
 ## Overview
 
-A tool for aggressively finding domain names for clients. Used in GroveEngine for client onboarding.
+A standalone tool that orchestrates AI agents to generate, check, and evaluate domain name candidates for client consultations. Runs autonomously in the background, producing a curated list of ~25 available, affordable domain options.
 
 **Key features:**
 - Parallel AI agents generate and evaluate domain candidates
-- RDAP-based availability checking (no API keys needed)  
+- RDAP-based availability checking (no API keys needed)
 - Runs asynchronously via Cloudflare Durable Objects
 - Produces 25+ vetted, affordable domain options
 
@@ -27,7 +27,7 @@ grove-domain-search check domains.txt --json
 
 ## Architecture
 
-See [SPEC.md](docs/SPEC.md) for full details.
+See [docs/SPEC.md](docs/SPEC.md) for full details.
 
 ```
 Quiz → Durable Object → AI Agents → RDAP Checker → Results → Email

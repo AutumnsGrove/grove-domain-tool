@@ -5,17 +5,26 @@
 ---
 
 ## Project Purpose
-[Fill in: What this project does - 1-2 sentences]
+
+AI-powered asynchronous domain availability checker that reduces domain hunting from weeks to hours. Orchestrates AI agents to generate, check, and evaluate domain name candidates for client consultations. Runs autonomously in the background, producing a curated list of ~25 available, affordable domain options.
 
 ## Tech Stack
-[Fill in: Technologies, frameworks, and languages used]
-- Language:
-- Framework:
-- Key Libraries:
-- Package Manager:
+
+- **Language**: Python 3.11+
+- **Framework**: Cloudflare Workers with Durable Objects
+- **Key Libraries**: Anthropic (Claude), OpenAI-compatible API (Kimi K2), httpx, pytest
+- **Package Manager**: UV
+- **Architecture**: MCP server with async orchestration layer
 
 ## Architecture Notes
-[Fill in: Key architectural decisions, patterns, or structure]
+
+**Key architectural decisions:**
+- Durable Objects (free tier) with Alarm API for chained execution - no paid Queues needed
+- SQLite-backed persistence in each DO instance
+- MCP server pattern for tool exposure
+- Parallel AI agents: Driver (Sonnet/K2) generates candidates, Haiku swarm evaluates
+- RDAP-based availability checking (no API keys required)
+- Terminal/CLI aesthetic inspired by Charm's gum/bubbletea
 
 ---
 
@@ -129,7 +138,7 @@ docs: Update README
 
 
 ### House Agents Quick Trigger
-**When searching 20+ files**, use house-research for:
+**When searching across 20+ files**, use house-research for:
 - Finding patterns across codebase
 - Searching TODO/FIXME comments
 - Locating API endpoints or functions

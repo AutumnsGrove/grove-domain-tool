@@ -200,6 +200,12 @@ class DriverAgent:
             temperature=0.8,  # Higher temp for creativity
         )
 
+        # Store usage for caller to access
+        self.last_usage = {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+        }
+
         # Parse response
         candidates = self._parse_candidates(response.content, batch_num)
 

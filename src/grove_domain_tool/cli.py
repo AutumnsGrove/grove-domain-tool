@@ -344,6 +344,12 @@ def main():
                 print(f"Available: {len(result.available_domains)}")
                 print(f"Good Results: {result.good_count}")
 
+                # Usage stats
+                usage = result.usage
+                print(f"\nAPI Usage:")
+                print(f"  Tokens: {usage.total_tokens:,} ({usage.input_tokens:,} in / {usage.output_tokens:,} out)")
+                print(f"  Est. Cost: ${usage.estimated_cost_usd:.4f}")
+
         asyncio.run(run_search())
 
 

@@ -72,6 +72,54 @@ class DomainSearchResult:
 
 
 @dataclass
+class UsageStats:
+    """Token usage and cost tracking."""
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    # Approximate costs per 1M tokens (as of Dec 2024)
+    # Sonnet: $3 input, $15 output
+    # Haiku: $0.25 input, $1.25 output
+    SONNET_INPUT_COST = 3.0 / 1_000_000
+    SONNET_OUTPUT_COST = 15.0 / 1_000_000
+    HAIKU_INPUT_COST = 0.25 / 1_000_000
+    HAIKU_OUTPUT_COST = 1.25 / 1_000_000
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    @property
+    def estimated_cost_usd(self) -> float:
+        """Estimate cost assuming mix of Sonnet (driver) and Haiku (swarm)."""
+        # Rough estimate: 20% Sonnet, 80% Haiku
+        sonnet_input = self.input_tokens * 0.2
+        sonnet_output = self.output_tokens * 0.2
+        haiku_input = self.input_tokens * 0.8
+        haiku_output = self.output_tokens * 0.8
+
+        return (
+            sonnet_input * self.SONNET_INPUT_COST +
+            sonnet_output * self.SONNET_OUTPUT_COST +
+            haiku_input * self.HAIKU_INPUT_COST +
+            haiku_output * self.HAIKU_OUTPUT_COST
+        )
+
+    def add(self, input_tokens: int, output_tokens: int):
+        """Add token counts from an API call."""
+        self.input_tokens += input_tokens
+        self.output_tokens += output_tokens
+
+    def to_dict(self) -> dict:
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "estimated_cost_usd": round(self.estimated_cost_usd, 4),
+        }
+
+
+@dataclass
 class SearchState:
     """Persistent state for a search job."""
     job_id: str
@@ -82,6 +130,7 @@ class SearchState:
     all_results: list[DomainSearchResult] = field(default_factory=list)
     checked_domains: list[str] = field(default_factory=list)
     available_domains: list[str] = field(default_factory=list)
+    usage: UsageStats = field(default_factory=UsageStats)
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     error: Optional[str] = None
@@ -106,6 +155,7 @@ class SearchState:
             "results_count": len(self.all_results),
             "good_count": self.good_count,
             "checked_count": len(self.checked_domains),
+            "usage": self.usage.to_dict(),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "error": self.error,
@@ -245,12 +295,26 @@ class DomainSearchOrchestrator:
             previous_results=previous if state.batch_num > 1 else None,
         )
 
+        # Track driver usage
+        if hasattr(self.driver, 'last_usage'):
+            state.usage.add(
+                self.driver.last_usage.get("input_tokens", 0),
+                self.driver.last_usage.get("output_tokens", 0),
+            )
+
         # 2. Evaluate candidates with swarm
         evaluations = await self.swarm.evaluate(
             domains=[c.domain for c in candidates],
             vibe=quiz.vibe,
             business_name=quiz.business_name,
         )
+
+        # Track swarm usage
+        if hasattr(self.swarm, 'last_usage'):
+            state.usage.add(
+                self.swarm.last_usage.get("input_tokens", 0),
+                self.swarm.last_usage.get("output_tokens", 0),
+            )
 
         # Filter to worth checking
         worth_checking = self.swarm.filter_worth_checking(evaluations)

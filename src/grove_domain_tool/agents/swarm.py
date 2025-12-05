@@ -155,7 +155,11 @@ class SwarmAgent:
             List of DomainEvaluation objects
         """
         if not domains:
+            self.last_usage = {"input_tokens": 0, "output_tokens": 0}
             return []
+
+        # Reset usage tracking for this batch
+        self._chunk_usages = []
 
         # Split into chunks
         chunks = [
@@ -184,6 +188,11 @@ class SwarmAgent:
                     all_evaluations.append(DomainEvaluation.quick_evaluate(domain))
             else:
                 all_evaluations.extend(result)
+
+        # Aggregate usage from all chunks
+        total_input = sum(u.get("input_tokens", 0) for u in self._chunk_usages)
+        total_output = sum(u.get("output_tokens", 0) for u in self._chunk_usages)
+        self.last_usage = {"input_tokens": total_input, "output_tokens": total_output}
 
         return all_evaluations
 
@@ -217,6 +226,12 @@ class SwarmAgent:
             max_tokens=2048,
             temperature=0.3,  # Lower temp for consistency
         )
+
+        # Track usage for this chunk
+        self._chunk_usages.append({
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+        })
 
         # Parse evaluations
         evaluations = self._parse_evaluations(response.content, domains)

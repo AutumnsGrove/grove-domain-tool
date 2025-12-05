@@ -474,6 +474,15 @@ class DomainSearchOrchestrator:
                 lines.append(f"│    {r.domain:<30} {price:>10}             │")
             lines.append("│                                                              │")
 
+        if unknown:
+            lines.extend([
+                "│  🔍 AVAILABLE (pricing pending)                              │",
+                "│                                                              │",
+            ])
+            for r in unknown[:10]:
+                lines.append(f"│    {r.domain:<30} {'—':>10}             │")
+            lines.append("│                                                              │")
+
         lines.extend([
             "│  ─────────────────────────────────────────────────────────   │",
             f"│  Found {len(results)} available domains • {state.batch_num} batch(es) completed       │",

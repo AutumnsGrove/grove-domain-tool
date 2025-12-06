@@ -150,18 +150,30 @@ POST /api/search
 
 ## Next Steps
 
-1. **Integrate with domains.grove.place**
-   - Website needs to poll `/api/status` or connect to `/api/stream`
-   - Show real-time progress as search runs
-   - Display results when complete
+### 1. Cloudflare Pricing Integration
+- Found an API to get real pricing data
+- Currently all domains show "unknown" pricing
+- Integrate pricing lookup into results
 
-2. **Add Cloudflare pricing lookup**
-   - Currently all domains show "unknown" pricing
-   - Need to integrate with Cloudflare's pricing API
+### 2. Email Notifications
+- Send results email when search completes
+- Send follow-up quiz email when needs_followup status
+- Use Resend integration (already have email.ts templates)
 
-3. **Email notifications**
-   - Send results email when search completes
-   - Send follow-up quiz email when needed
+### 3. Config Panel - All Options & Valves
+- Expose all configurable options in admin panel
+- MAX_BATCHES (currently 6)
+- TARGET_RESULTS (currently 25)
+- TLD preferences
+- Vibe options
+- Rate limiting settings
+- API usage limits/warnings
+
+### 4. Integrate with domains.grove.place
+- Website needs to poll `/api/status` or connect to `/api/stream`
+- Show real-time progress as search runs
+- Display results when complete
+- Admin panel should show running jobs
 
 ---
 

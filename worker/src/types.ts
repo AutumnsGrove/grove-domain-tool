@@ -7,10 +7,23 @@
 // ============================================================================
 
 export interface Env {
+  // Durable Object bindings
   SEARCH_JOB: DurableObjectNamespace;
+
+  // AI binding (for Cloudflare Workers AI)
+  AI?: Ai;
+
+  // API keys
   ANTHROPIC_API_KEY?: string;
-  RESEND_API_KEY?: string;
+  DEEPSEEK_API_KEY?: string;
   KIMI_API_KEY?: string;
+  RESEND_API_KEY?: string;
+
+  // Provider configuration
+  DRIVER_PROVIDER?: string; // claude | deepseek | kimi | cloudflare
+  SWARM_PROVIDER?: string; // claude | deepseek | kimi | cloudflare
+
+  // General settings
   ENVIRONMENT: string;
   MAX_BATCHES: string;
   TARGET_RESULTS: string;

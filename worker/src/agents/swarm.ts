@@ -1,11 +1,14 @@
 /**
  * Swarm Agent - Parallel domain evaluation
  *
- * Uses multiple concurrent Haiku calls to quickly evaluate domain candidates
+ * Uses multiple concurrent AI calls to quickly evaluate domain candidates
  * for quality, pronounceability, memorability, and brand fit.
+ * Supports tool calling with fallback to JSON prompts.
  */
 
 import { SWARM_SYSTEM_PROMPT, formatSwarmPrompt } from "../prompts";
+import type { AIProvider, ProviderResponse } from "../providers/types";
+import { SWARM_TOOL } from "../providers/tools";
 
 export interface DomainEvaluation {
   domain: string;
@@ -34,10 +37,11 @@ export interface SwarmOptions {
 }
 
 /**
- * Evaluate domains in parallel using Haiku
+ * Evaluate domains in parallel using the provided AI provider
+ * Supports tool calling with fallback to JSON prompts
  */
 export async function evaluateDomains(
-  apiKey: string,
+  provider: AIProvider,
   options: SwarmOptions
 ): Promise<SwarmResult> {
   const { domains, vibe, businessName, chunkSize = 10, maxConcurrent = 12 } = options;
@@ -61,7 +65,7 @@ export async function evaluateDomains(
   for (let i = 0; i < chunks.length; i += maxConcurrent) {
     const batch = chunks.slice(i, i + maxConcurrent);
     const batchResults = await Promise.all(
-      batch.map(chunk => evaluateChunk(apiKey, chunk, vibe, businessName))
+      batch.map(chunk => evaluateChunk(provider, chunk, vibe, businessName))
     );
 
     for (const result of batchResults) {
@@ -86,9 +90,10 @@ export async function evaluateDomains(
 
 /**
  * Evaluate a single chunk of domains
+ * Supports tool calling with fallback to JSON prompts
  */
 async function evaluateChunk(
-  apiKey: string,
+  provider: AIProvider,
   domains: string[],
   vibe: string,
   businessName: string
@@ -96,46 +101,43 @@ async function evaluateChunk(
   const prompt = formatSwarmPrompt({ domains, vibe, businessName });
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
-        max_tokens: 2048,
-        temperature: 0.3,
-        system: SWARM_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    // Try tool calling if provider supports it
+    if (provider.supportsTools) {
+      try {
+        const response = await provider.generateWithTools({
+          prompt,
+          tools: [SWARM_TOOL],
+          system: SWARM_SYSTEM_PROMPT,
+          maxTokens: 2048,
+          temperature: 0.3,
+          toolChoice: SWARM_TOOL.name,
+        });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Haiku API error: ${response.status} - ${errorText}`);
-      // Fall back to quick evaluation
-      return {
-        evaluations: domains.map(d => quickEvaluate(d)),
-        inputTokens: 0,
-        outputTokens: 0,
-      };
+        // Parse tool call results
+        if (response.toolCalls.length > 0) {
+          const evaluations = parseToolCall(response.toolCalls, domains);
+          return {
+            evaluations,
+            inputTokens: response.usage.inputTokens,
+            outputTokens: response.usage.outputTokens,
+          };
+        } else {
+          // Model responded without using tool, fall back to content parsing
+          const evaluations = parseEvaluations(response.content, domains);
+          return {
+            evaluations,
+            inputTokens: response.usage.inputTokens,
+            outputTokens: response.usage.outputTokens,
+          };
+        }
+      } catch (error) {
+        console.warn("Tool calling failed, falling back to JSON prompt:", error);
+        return evaluateChunkFallback(provider, prompt, domains);
+      }
+    } else {
+      // Provider doesn't support tools, use JSON prompt
+      return evaluateChunkFallback(provider, prompt, domains);
     }
-
-    const data = await response.json() as {
-      content: { type: string; text: string }[];
-      usage: { input_tokens: number; output_tokens: number };
-    };
-
-    const content = data.content[0]?.text || "";
-    const evaluations = parseEvaluations(content, domains);
-
-    return {
-      evaluations,
-      inputTokens: data.usage.input_tokens,
-      outputTokens: data.usage.output_tokens,
-    };
   } catch (error) {
     console.error("Swarm evaluation error:", error);
     // Fall back to quick evaluation
@@ -145,6 +147,85 @@ async function evaluateChunk(
       outputTokens: 0,
     };
   }
+}
+
+/**
+ * Evaluate chunk using traditional JSON prompt (fallback method)
+ */
+async function evaluateChunkFallback(
+  provider: AIProvider,
+  prompt: string,
+  domains: string[]
+): Promise<SwarmResult> {
+  const response = await provider.generate({
+    prompt,
+    system: SWARM_SYSTEM_PROMPT,
+    maxTokens: 2048,
+    temperature: 0.3,
+  });
+
+  return {
+    evaluations: parseEvaluations(response.content, domains),
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+  };
+}
+
+/**
+ * Parse evaluation results from tool call
+ */
+function parseToolCall(
+  toolCalls: ProviderResponse["toolCalls"],
+  expectedDomains: string[]
+): DomainEvaluation[] {
+  const evaluations: DomainEvaluation[] = [];
+  const parsedDomains = new Set<string>();
+
+  for (const tc of toolCalls) {
+    if (tc.toolName === SWARM_TOOL.name) {
+      const evalList = (tc.arguments as { evaluations?: EvalData[] }).evaluations || [];
+      for (const evalData of evalList) {
+        if (evalData.domain) {
+          const domain = evalData.domain.toLowerCase();
+          if (!parsedDomains.has(domain)) {
+            parsedDomains.add(domain);
+            evaluations.push({
+              domain,
+              score: evalData.score ?? 0.5,
+              worthChecking: evalData.worth_checking ?? true,
+              pronounceable: evalData.pronounceable ?? true,
+              memorable: evalData.memorable ?? true,
+              brandFit: evalData.brand_fit ?? true,
+              emailFriendly: evalData.email_friendly ?? true,
+              flags: evalData.flags || [],
+              notes: evalData.notes || "",
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Fill in missing domains with quick evaluation
+  for (const domain of expectedDomains) {
+    if (!parsedDomains.has(domain.toLowerCase())) {
+      evaluations.push(quickEvaluate(domain));
+    }
+  }
+
+  return evaluations;
+}
+
+interface EvalData {
+  domain: string;
+  score?: number;
+  worth_checking?: boolean;
+  pronounceable?: boolean;
+  memorable?: boolean;
+  brand_fit?: boolean;
+  email_friendly?: boolean;
+  flags?: string[];
+  notes?: string;
 }
 
 /**

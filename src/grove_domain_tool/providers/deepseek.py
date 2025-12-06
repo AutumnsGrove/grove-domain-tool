@@ -1,7 +1,7 @@
 """
-Kimi (Moonshot) provider implementation
+DeepSeek provider implementation
 
-Kimi K2 uses an OpenAI-compatible API with tool calling support.
+DeepSeek V3.2 uses an OpenAI-compatible API with tool calling support.
 """
 
 import os
@@ -15,43 +15,43 @@ from .base import (
 from .tools import tools_to_openai
 
 
-class KimiProvider(ModelProvider):
+class DeepSeekProvider(ModelProvider):
     """
-    Moonshot Kimi provider.
+    DeepSeek provider.
 
     Uses OpenAI-compatible API. API key is read from:
     1. Constructor argument
-    2. KIMI_API_KEY environment variable
+    2. DEEPSEEK_API_KEY environment variable
     """
 
-    # Kimi API base URL
-    BASE_URL = "https://api.moonshot.cn/v1"
+    # DeepSeek API base URL
+    BASE_URL = "https://api.deepseek.com"
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "kimi-k2-0528",
+        default_model: str = "deepseek-chat",
         base_url: Optional[str] = None,
     ):
         """
-        Initialize Kimi provider.
+        Initialize DeepSeek provider.
 
         Args:
-            api_key: Moonshot API key (falls back to env var)
-            default_model: Default model to use
-            base_url: API base URL (defaults to Moonshot's API)
+            api_key: DeepSeek API key (falls back to env var)
+            default_model: Default model to use (deepseek-chat for V3.2)
+            base_url: API base URL (defaults to DeepSeek's API)
         """
-        self._api_key = api_key or os.getenv("KIMI_API_KEY")
+        self._api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
         self._default_model = default_model
         self._base_url = base_url or self.BASE_URL
         self._client = None
 
     def _get_client(self):
-        """Lazy initialization of OpenAI client for Kimi."""
+        """Lazy initialization of OpenAI client for DeepSeek."""
         if self._client is None:
             if not self._api_key:
                 raise AuthenticationError(
-                    "No Kimi API key provided. Set KIMI_API_KEY or pass api_key to constructor."
+                    "No DeepSeek API key provided. Set DEEPSEEK_API_KEY or pass api_key to constructor."
                 )
             try:
                 from openai import AsyncOpenAI
@@ -65,7 +65,7 @@ class KimiProvider(ModelProvider):
 
     @property
     def name(self) -> str:
-        return "kimi"
+        return "deepseek"
 
     @property
     def default_model(self) -> str:
@@ -85,18 +85,16 @@ class KimiProvider(ModelProvider):
         temperature: float = 0.7,
         **kwargs
     ) -> ModelResponse:
-        """Generate a response using Kimi."""
+        """Generate a response using DeepSeek."""
         client = self._get_client()
         model = model or self._default_model
 
         try:
-            # Build messages
             messages = []
             if system:
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
 
-            # Make the API call
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -104,12 +102,10 @@ class KimiProvider(ModelProvider):
                 temperature=temperature,
             )
 
-            # Extract content
             content = ""
             if response.choices and response.choices[0].message:
                 content = response.choices[0].message.content or ""
 
-            # Extract usage
             usage = {}
             if response.usage:
                 usage = {
@@ -128,16 +124,13 @@ class KimiProvider(ModelProvider):
         except Exception as e:
             error_str = str(e).lower()
 
-            # Handle rate limiting
             if "rate" in error_str or "429" in error_str:
-                raise RateLimitError(f"Kimi rate limit exceeded: {e}")
+                raise RateLimitError(f"DeepSeek rate limit exceeded: {e}")
 
-            # Handle auth errors
             if "auth" in error_str or "401" in error_str or "api key" in error_str:
-                raise AuthenticationError(f"Kimi authentication failed: {e}")
+                raise AuthenticationError(f"DeepSeek authentication failed: {e}")
 
-            # Generic error
-            raise ProviderError(f"Kimi API error: {e}")
+            raise ProviderError(f"DeepSeek API error: {e}")
 
     async def generate_with_tools(
         self,
@@ -151,7 +144,7 @@ class KimiProvider(ModelProvider):
         tool_choice: Optional[str] = None,
         **kwargs
     ) -> ModelResponse:
-        """Generate a response using Kimi with tool calling."""
+        """Generate a response using DeepSeek with tool calling."""
         client = self._get_client()
         model = model or self._default_model
 
@@ -180,7 +173,6 @@ class KimiProvider(ModelProvider):
 
             response = await client.chat.completions.create(**request_kwargs)
 
-            # Extract content and tool calls
             content = ""
             tool_calls = []
 
@@ -221,9 +213,9 @@ class KimiProvider(ModelProvider):
             error_str = str(e).lower()
 
             if "rate" in error_str or "429" in error_str:
-                raise RateLimitError(f"Kimi rate limit exceeded: {e}")
+                raise RateLimitError(f"DeepSeek rate limit exceeded: {e}")
 
             if "auth" in error_str or "401" in error_str or "api key" in error_str:
-                raise AuthenticationError(f"Kimi authentication failed: {e}")
+                raise AuthenticationError(f"DeepSeek authentication failed: {e}")
 
-            raise ProviderError(f"Kimi API error: {e}")
+            raise ProviderError(f"DeepSeek API error: {e}")

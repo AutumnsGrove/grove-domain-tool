@@ -19,6 +19,7 @@ import { generateCandidates, type DomainCandidate } from "./agents/driver";
 import { evaluateDomains, filterWorthChecking, type DomainEvaluation } from "./agents/swarm";
 import { checkDomainsParallel, type DomainCheckResult } from "./rdap";
 import { getBatchPricing, type DomainPrice } from "./pricing";
+import { getProvider, type ProviderName } from "./providers";
 
 export class SearchJobDO implements DurableObject {
   private state: DurableObjectState;
@@ -659,10 +660,12 @@ export class SearchJobDO implements DurableObject {
     const batchNum = this.incrementBatchNum();
     const startTime = Date.now();
 
-    const apiKey = this.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY not configured");
-    }
+    // Create providers based on configuration
+    const driverProviderName = (this.env.DRIVER_PROVIDER || "claude") as ProviderName;
+    const swarmProviderName = (this.env.SWARM_PROVIDER || "claude") as ProviderName;
+
+    const driverProvider = getProvider(driverProviderName, this.env);
+    const swarmProvider = getProvider(swarmProviderName, this.env);
 
     const quiz = job.quiz_responses;
     const maxBatches = parseInt(this.env.MAX_BATCHES || "6", 10);
@@ -684,8 +687,8 @@ export class SearchJobDO implements DurableObject {
     console.log(`Processing batch ${batchNum} for "${quiz.business_name}"`);
 
     // Step 1: Generate candidates via Driver agent
-    console.log("Step 1: Generating candidates...");
-    const driverResult = await generateCandidates(apiKey, {
+    console.log(`Step 1: Generating candidates using ${driverProviderName}...`);
+    const driverResult = await generateCandidates(driverProvider, {
       businessName: quiz.business_name,
       tldPreferences: quiz.tld_preferences,
       vibe: quiz.vibe,
@@ -720,8 +723,8 @@ export class SearchJobDO implements DurableObject {
     }
 
     // Step 2: Evaluate candidates via Swarm agent
-    console.log(`Step 2: Evaluating ${newCandidates.length} candidates...`);
-    const swarmResult = await evaluateDomains(apiKey, {
+    console.log(`Step 2: Evaluating ${newCandidates.length} candidates using ${swarmProviderName}...`);
+    const swarmResult = await evaluateDomains(swarmProvider, {
       domains: newCandidates.map(c => c.domain),
       vibe: quiz.vibe,
       businessName: quiz.business_name,

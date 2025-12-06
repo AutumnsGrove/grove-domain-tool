@@ -3,17 +3,23 @@ Swarm Agent - Parallel domain evaluation
 
 Uses multiple concurrent Haiku calls to quickly evaluate domain candidates
 for quality, pronounceability, memorability, and brand fit.
+
+Supports tool calling when the provider supports it, with fallback to JSON prompts.
 """
 
 import json
 import re
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-from ..providers.base import ModelProvider
+from ..providers.base import ModelProvider, ToolCallError
+from ..providers.tools import SWARM_TOOL
 from ..config import config
 from .prompts import SWARM_SYSTEM_PROMPT, format_swarm_prompt
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -219,22 +225,89 @@ class SwarmAgent:
             business_name=business_name,
         )
 
+        evaluations = []
+
+        # Try tool calling if provider supports it
+        if self.provider.supports_tools:
+            try:
+                response = await self.provider.generate_with_tools(
+                    prompt=prompt,
+                    tools=[SWARM_TOOL],
+                    system=SWARM_SYSTEM_PROMPT,
+                    model=self.model,
+                    max_tokens=2048,
+                    temperature=0.3,
+                    tool_choice=SWARM_TOOL.name,
+                )
+
+                self._chunk_usages.append({
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                })
+
+                if response.has_tool_call:
+                    evaluations = self._parse_tool_call(response.tool_calls, domains)
+                    logger.debug(f"Tool calling returned {len(evaluations)} evaluations")
+                else:
+                    logger.debug("Model didn't use tool, falling back to content parsing")
+                    evaluations = self._parse_evaluations(response.content, domains)
+
+            except (ToolCallError, Exception) as e:
+                logger.warning(f"Tool calling failed, falling back to JSON prompt: {e}")
+                evaluations = await self._evaluate_chunk_fallback(prompt, domains)
+        else:
+            evaluations = await self._evaluate_chunk_fallback(prompt, domains)
+
+        return evaluations
+
+    async def _evaluate_chunk_fallback(
+        self,
+        prompt: str,
+        domains: list[str],
+    ) -> list[DomainEvaluation]:
+        """
+        Evaluate chunk using traditional JSON prompt (fallback method).
+        """
         response = await self.provider.generate(
             prompt=prompt,
             system=SWARM_SYSTEM_PROMPT,
             model=self.model,
             max_tokens=2048,
-            temperature=0.3,  # Lower temp for consistency
+            temperature=0.3,
         )
 
-        # Track usage for this chunk
         self._chunk_usages.append({
             "input_tokens": response.input_tokens,
             "output_tokens": response.output_tokens,
         })
 
-        # Parse evaluations
-        evaluations = self._parse_evaluations(response.content, domains)
+        return self._parse_evaluations(response.content, domains)
+
+    def _parse_tool_call(
+        self,
+        tool_calls: list,
+        expected_domains: list[str],
+    ) -> list[DomainEvaluation]:
+        """
+        Parse evaluation results from tool call.
+        """
+        evaluations = []
+        parsed_domains = set()
+
+        for tc in tool_calls:
+            if tc.tool_name == SWARM_TOOL.name:
+                eval_list = tc.arguments.get("evaluations", [])
+                for eval_data in eval_list:
+                    if isinstance(eval_data, dict) and "domain" in eval_data:
+                        domain = eval_data["domain"].lower()
+                        if domain not in parsed_domains:
+                            evaluations.append(DomainEvaluation.from_dict(eval_data))
+                            parsed_domains.add(domain)
+
+        # Fill in missing domains with heuristic evaluation
+        for domain in expected_domains:
+            if domain.lower() not in parsed_domains:
+                evaluations.append(DomainEvaluation.quick_evaluate(domain))
 
         return evaluations
 

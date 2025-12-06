@@ -8,6 +8,10 @@ compatibility_date = "2024-11-01"
 name = "SEARCH_JOB"
 class_name = "SearchJobDO"
 
+# Workers AI binding (for Cloudflare AI models like Llama 4 Scout)
+[ai]
+binding = "AI"
+
 # Migrations for Durable Objects
 [[migrations]]
 tag = "v1"
@@ -18,6 +22,9 @@ new_sqlite_classes = ["SearchJobDO"]
 ENVIRONMENT = "production"
 MAX_BATCHES = "6"
 TARGET_RESULTS = "25"
+# Provider selection: claude, deepseek, kimi, cloudflare
+DRIVER_PROVIDER = "claude"
+SWARM_PROVIDER = "claude"
 
 # Development environment
 [env.dev]
@@ -27,6 +34,9 @@ name = "grove-domain-tool-dev"
 name = "SEARCH_JOB"
 class_name = "SearchJobDO"
 
+[env.dev.ai]
+binding = "AI"
+
 [[env.dev.migrations]]
 tag = "v1"
 new_sqlite_classes = ["SearchJobDO"]
@@ -35,10 +45,19 @@ new_sqlite_classes = ["SearchJobDO"]
 ENVIRONMENT = "development"
 MAX_BATCHES = "2"
 TARGET_RESULTS = "25"
+DRIVER_PROVIDER = "claude"
+SWARM_PROVIDER = "claude"
 
 # Secrets to configure:
-# - ANTHROPIC_API_KEY: API key for Claude
+# - ANTHROPIC_API_KEY: API key for Claude (required if using claude provider)
+# - DEEPSEEK_API_KEY: API key for DeepSeek (required if using deepseek provider)
+# - KIMI_API_KEY: API key for Kimi K2 (required if using kimi provider)
 # - RESEND_API_KEY: API key for email sending
-# - KIMI_API_KEY: Optional API key for Kimi K2 (if using parallel providers)
 #
 # Set with: wrangler secret put ANTHROPIC_API_KEY
+#
+# Provider options:
+# - claude: Claude Sonnet 4 ($3.00/$15.00 per M tokens)
+# - deepseek: DeepSeek V3.2 ($0.28/$0.42 per M tokens)
+# - kimi: Kimi K2 ($0.60/$2.50 per M tokens)
+# - cloudflare: Llama 4 Scout ($0.27/$0.85 per M tokens, uses AI binding)

@@ -6,7 +6,7 @@ Defines the interface all providers must implement for domain generation and eva
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 import asyncio
 
 
@@ -25,6 +25,27 @@ class AuthenticationError(ProviderError):
     pass
 
 
+class ToolCallError(ProviderError):
+    """Tool call parsing or execution failed."""
+    pass
+
+
+@dataclass
+class ToolDefinition:
+    """Definition of a tool/function the model can call."""
+    name: str
+    description: str
+    parameters: Dict[str, Any]  # JSON Schema
+
+
+@dataclass
+class ToolCallResult:
+    """Result of a tool call from the model."""
+    tool_name: str
+    arguments: Dict[str, Any]  # Parsed JSON arguments
+    raw_response: Optional[Any] = None
+
+
 @dataclass
 class ModelResponse:
     """Response from an AI model."""
@@ -33,6 +54,7 @@ class ModelResponse:
     provider: str
     usage: dict = field(default_factory=dict)
     raw_response: Optional[Any] = None
+    tool_calls: List[ToolCallResult] = field(default_factory=list)
 
     @property
     def input_tokens(self) -> int:
@@ -49,6 +71,11 @@ class ModelResponse:
         """Total tokens used."""
         return self.input_tokens + self.output_tokens
 
+    @property
+    def has_tool_call(self) -> bool:
+        """Whether the response contains tool calls."""
+        return len(self.tool_calls) > 0
+
 
 class ModelProvider(ABC):
     """
@@ -56,12 +83,13 @@ class ModelProvider(ABC):
 
     Providers must implement generate() for single prompts and
     optionally generate_batch() for parallel processing.
+    Providers may also implement generate_with_tools() for function calling.
     """
 
     @property
     @abstractmethod
     def name(self) -> str:
-        """Provider name (e.g., 'claude', 'kimi')."""
+        """Provider name (e.g., 'claude', 'kimi', 'deepseek', 'cloudflare')."""
         pass
 
     @property
@@ -69,6 +97,11 @@ class ModelProvider(ABC):
     def default_model(self) -> str:
         """Default model ID for this provider."""
         pass
+
+    @property
+    def supports_tools(self) -> bool:
+        """Whether this provider supports tool/function calling."""
+        return False
 
     @abstractmethod
     async def generate(
@@ -101,6 +134,40 @@ class ModelProvider(ABC):
             AuthenticationError: On auth failures
         """
         pass
+
+    async def generate_with_tools(
+        self,
+        prompt: str,
+        tools: List[ToolDefinition],
+        *,
+        system: Optional[str] = None,
+        model: Optional[str] = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.7,
+        tool_choice: Optional[str] = None,
+        **kwargs
+    ) -> ModelResponse:
+        """
+        Generate a response with tool/function calling.
+
+        Args:
+            prompt: The user prompt
+            tools: List of tool definitions the model can use
+            system: Optional system prompt
+            model: Model ID (uses default if not specified)
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            tool_choice: How to select tools ("auto", "any", or specific tool name)
+            **kwargs: Provider-specific options
+
+        Returns:
+            ModelResponse with tool_calls populated if the model used tools
+
+        Raises:
+            ProviderError: On API errors
+            ToolCallError: If tool calling is not supported
+        """
+        raise ToolCallError(f"{self.name} provider does not support tool calling")
 
     async def generate_batch(
         self,

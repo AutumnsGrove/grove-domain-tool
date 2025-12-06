@@ -3,16 +3,22 @@ Driver Agent - Generates domain name candidates
 
 The driver agent is the "brain" that generates creative domain suggestions
 based on client preferences and learns from previous batch results.
+
+Supports tool calling when the provider supports it, with fallback to JSON prompts.
 """
 
 import json
 import re
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-from ..providers.base import ModelProvider, ModelResponse
+from ..providers.base import ModelProvider, ModelResponse, ToolCallError
+from ..providers.tools import DRIVER_TOOL
 from ..config import config
 from .prompts import DRIVER_SYSTEM_PROMPT, format_driver_prompt
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -191,30 +197,101 @@ class DriverAgent:
             previous_results=previous_results.to_context_dict() if previous_results else None,
         )
 
-        # Generate response
-        response = await self.provider.generate(
-            prompt=prompt,
-            system=DRIVER_SYSTEM_PROMPT,
-            model=self.model,
-            max_tokens=4096,
-            temperature=0.8,  # Higher temp for creativity
-        )
+        candidates = []
 
-        # Store usage for caller to access
-        self.last_usage = {
-            "input_tokens": response.input_tokens,
-            "output_tokens": response.output_tokens,
-        }
+        # Try tool calling if provider supports it
+        if self.provider.supports_tools:
+            try:
+                response = await self.provider.generate_with_tools(
+                    prompt=prompt,
+                    tools=[DRIVER_TOOL],
+                    system=DRIVER_SYSTEM_PROMPT,
+                    model=self.model,
+                    max_tokens=4096,
+                    temperature=0.8,
+                    tool_choice=DRIVER_TOOL.name,
+                )
 
-        # Parse response
-        candidates = self._parse_candidates(response.content, batch_num)
+                self.last_usage = {
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                }
+
+                # Parse tool call results
+                if response.has_tool_call:
+                    candidates = self._parse_tool_call(response.tool_calls, batch_num)
+                    logger.debug(f"Tool calling returned {len(candidates)} candidates")
+                else:
+                    # Model responded without using tool, fall back to content parsing
+                    logger.debug("Model didn't use tool, falling back to content parsing")
+                    candidates = self._parse_candidates(response.content, batch_num)
+
+            except (ToolCallError, Exception) as e:
+                logger.warning(f"Tool calling failed, falling back to JSON prompt: {e}")
+                candidates = await self._generate_with_fallback(prompt, batch_num)
+        else:
+            # Provider doesn't support tools, use JSON prompt
+            candidates = await self._generate_with_fallback(prompt, batch_num)
 
         # Filter out previously checked domains
         if previous_results:
             checked_set = set(d.lower() for d in previous_results.checked_domains)
             candidates = [c for c in candidates if c.domain.lower() not in checked_set]
 
-        return candidates[:count]  # Limit to requested count
+        return candidates[:count]
+
+    async def _generate_with_fallback(
+        self,
+        prompt: str,
+        batch_num: int,
+    ) -> list[DomainCandidate]:
+        """
+        Generate candidates using traditional JSON prompt (fallback method).
+        """
+        response = await self.provider.generate(
+            prompt=prompt,
+            system=DRIVER_SYSTEM_PROMPT,
+            model=self.model,
+            max_tokens=4096,
+            temperature=0.8,
+        )
+
+        self.last_usage = {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+        }
+
+        return self._parse_candidates(response.content, batch_num)
+
+    def _parse_tool_call(
+        self,
+        tool_calls: list,
+        batch_num: int,
+    ) -> list[DomainCandidate]:
+        """
+        Parse domain candidates from tool call results.
+        """
+        candidates = []
+
+        for tc in tool_calls:
+            if tc.tool_name == DRIVER_TOOL.name:
+                domains = tc.arguments.get("domains", [])
+                for domain in domains:
+                    if isinstance(domain, str) and self._is_valid_domain(domain):
+                        candidates.append(DomainCandidate(
+                            domain=domain.lower(),
+                            batch_num=batch_num
+                        ))
+
+        # Deduplicate
+        seen = set()
+        unique = []
+        for c in candidates:
+            if c.domain.lower() not in seen:
+                seen.add(c.domain.lower())
+                unique.append(c)
+
+        return unique
 
     def _parse_candidates(self, content: str, batch_num: int) -> list[DomainCandidate]:
         """

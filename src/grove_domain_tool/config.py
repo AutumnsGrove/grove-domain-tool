@@ -39,15 +39,35 @@ class PricingConfig:
 @dataclass
 class ModelConfig:
     """AI model selection"""
-    driver_provider: Literal["claude", "kimi"] = os.getenv("DRIVER_PROVIDER", "claude")
-    driver_model: str = os.getenv("DRIVER_MODEL", "claude-sonnet-4-20250514")
-    swarm_provider: Literal["claude", "kimi"] = os.getenv("SWARM_PROVIDER", "claude")
-    swarm_model: str = os.getenv("SWARM_MODEL", "claude-haiku-3-20240307")
+    driver_provider: Literal["claude", "kimi", "deepseek", "cloudflare"] = os.getenv("DRIVER_PROVIDER", "claude")
+    driver_model: str = os.getenv("DRIVER_MODEL", "")  # Empty = use provider default
+    swarm_provider: Literal["claude", "kimi", "deepseek", "cloudflare"] = os.getenv("SWARM_PROVIDER", "claude")
+    swarm_model: str = os.getenv("SWARM_MODEL", "")  # Empty = use provider default
     parallel_providers: bool = os.getenv("PARALLEL_PROVIDERS", "false").lower() == "true"
 
-    # Kimi alternatives
-    kimi_driver_model: str = os.getenv("KIMI_DRIVER", "kimi-k2-0528-thinking")
-    kimi_swarm_model: str = os.getenv("KIMI_SWARM", "kimi-k2-0528")
+    # Default models per provider
+    PROVIDER_DEFAULTS = {
+        "claude": "claude-sonnet-4-20250514",
+        "kimi": "kimi-k2-0528",
+        "deepseek": "deepseek-chat",
+        "cloudflare": "@cf/meta/llama-4-scout-17b-16e-instruct",
+    }
+
+    # Cost per 1M tokens (input, output) in USD
+    PROVIDER_COSTS = {
+        "claude": {"input": 3.00, "output": 15.00},
+        "kimi": {"input": 0.60, "output": 2.50},
+        "deepseek": {"input": 0.28, "output": 0.42},
+        "cloudflare": {"input": 0.27, "output": 0.85},
+    }
+
+    def get_driver_model(self) -> str:
+        """Get driver model, falling back to provider default."""
+        return self.driver_model or self.PROVIDER_DEFAULTS.get(self.driver_provider, "")
+
+    def get_swarm_model(self) -> str:
+        """Get swarm model, falling back to provider default."""
+        return self.swarm_model or self.PROVIDER_DEFAULTS.get(self.swarm_provider, "")
 
 
 @dataclass

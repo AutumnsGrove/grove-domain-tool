@@ -1,11 +1,14 @@
 /**
  * Driver Agent - Generates domain name candidates
  *
- * Uses Claude Sonnet to generate creative domain suggestions
+ * Uses configurable AI providers to generate creative domain suggestions
  * based on client preferences and learns from previous batch results.
+ * Supports tool calling with fallback to JSON prompts.
  */
 
 import { DRIVER_SYSTEM_PROMPT, formatDriverPrompt, type PreviousResults } from "../prompts";
+import type { AIProvider, ProviderResponse } from "../providers/types";
+import { DRIVER_TOOL } from "../providers/tools";
 
 export interface DomainCandidate {
   domain: string;
@@ -33,10 +36,11 @@ export interface DriverOptions {
 }
 
 /**
- * Call Claude API to generate domain candidates
+ * Generate domain candidates using the provided AI provider
+ * Supports tool calling with fallback to JSON prompts
  */
 export async function generateCandidates(
-  apiKey: string,
+  provider: AIProvider,
   options: DriverOptions
 ): Promise<DriverResult> {
   const prompt = formatDriverPrompt({
@@ -51,36 +55,46 @@ export async function generateCandidates(
     previousResults: options.previousResults,
   });
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      temperature: 0.8,
-      system: DRIVER_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+  let candidates: DomainCandidate[] = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errorText}`);
+  // Try tool calling if provider supports it
+  if (provider.supportsTools) {
+    try {
+      const response = await provider.generateWithTools({
+        prompt,
+        tools: [DRIVER_TOOL],
+        system: DRIVER_SYSTEM_PROMPT,
+        maxTokens: 4096,
+        temperature: 0.8,
+        toolChoice: DRIVER_TOOL.name,
+      });
+
+      inputTokens = response.usage.inputTokens;
+      outputTokens = response.usage.outputTokens;
+
+      // Parse tool call results
+      if (response.toolCalls.length > 0) {
+        candidates = parseToolCall(response.toolCalls, options.batchNum);
+      } else {
+        // Model responded without using tool, fall back to content parsing
+        candidates = parseCandidates(response.content, options.batchNum);
+      }
+    } catch (error) {
+      console.warn("Tool calling failed, falling back to JSON prompt:", error);
+      const result = await generateWithFallback(provider, prompt, options.batchNum);
+      candidates = result.candidates;
+      inputTokens = result.inputTokens;
+      outputTokens = result.outputTokens;
+    }
+  } else {
+    // Provider doesn't support tools, use JSON prompt
+    const result = await generateWithFallback(provider, prompt, options.batchNum);
+    candidates = result.candidates;
+    inputTokens = result.inputTokens;
+    outputTokens = result.outputTokens;
   }
-
-  const data = await response.json() as {
-    content: { type: string; text: string }[];
-    usage: { input_tokens: number; output_tokens: number };
-  };
-
-  const content = data.content[0]?.text || "";
-
-  // Parse candidates from response
-  const candidates = parseCandidates(content, options.batchNum);
 
   // Filter out previously checked domains if provided
   let filteredCandidates = candidates;
@@ -98,9 +112,56 @@ export async function generateCandidates(
 
   return {
     candidates: filteredCandidates.slice(0, options.count || 50),
-    inputTokens: data.usage.input_tokens,
-    outputTokens: data.usage.output_tokens,
+    inputTokens,
+    outputTokens,
   };
+}
+
+/**
+ * Generate candidates using traditional JSON prompt (fallback method)
+ */
+async function generateWithFallback(
+  provider: AIProvider,
+  prompt: string,
+  batchNum: number
+): Promise<DriverResult> {
+  const response = await provider.generate({
+    prompt,
+    system: DRIVER_SYSTEM_PROMPT,
+    maxTokens: 4096,
+    temperature: 0.8,
+  });
+
+  return {
+    candidates: parseCandidates(response.content, batchNum),
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+  };
+}
+
+/**
+ * Parse domain candidates from tool call results
+ */
+function parseToolCall(
+  toolCalls: ProviderResponse["toolCalls"],
+  batchNum: number
+): DomainCandidate[] {
+  const candidates: DomainCandidate[] = [];
+  const seen = new Set<string>();
+
+  for (const tc of toolCalls) {
+    if (tc.toolName === DRIVER_TOOL.name) {
+      const domains = (tc.arguments as { domains?: string[] }).domains || [];
+      for (const domain of domains) {
+        if (typeof domain === "string" && isValidDomain(domain) && !seen.has(domain.toLowerCase())) {
+          seen.add(domain.toLowerCase());
+          candidates.push(createCandidate(domain, batchNum));
+        }
+      }
+    }
+  }
+
+  return candidates;
 }
 
 /**

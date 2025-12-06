@@ -39,11 +39,12 @@
 - [x] **TypeScript RDAP checker**
 - [x] **End-to-end Worker tested and working!**
 
-## Phase 4: MCP Server
-- [ ] Implement MCP tool definitions
-- [ ] Add job status tracking via MCP
-- [ ] Build results aggregation
-- [ ] Test MCP tools with Claude Desktop
+## Phase 4: MCP Server - SKIPPED
+*Not needed - REST API is sufficient for web integration*
+- [ ] ~~Implement MCP tool definitions~~
+- [ ] ~~Add job status tracking via MCP~~
+- [ ] ~~Build results aggregation~~
+- [ ] ~~Test MCP tools with Claude Desktop~~
 
 ## Phase 5: Quiz System - PARTIAL
 - [x] Static initial quiz schema (JSON)
@@ -52,11 +53,14 @@
 - [x] Resend email integration (email.ts templates)
 - [x] Email templates (terminal aesthetic)
 
-## Phase 6: Multi-Model & Polish
+## Phase 6: Multi-Model & Polish - COMPLETE
 - [x] Add Kimi K2 provider (stub, ready for API key)
-- [ ] Parallel provider execution (both providers simultaneously)
-- [ ] GroveEngine integration
-- [x] Production testing (Worker API tested!)
+- [x] **Multi-model support with function calling** (DeepSeek V3.2, Kimi K2, Cloudflare Llama 4 Scout)
+- [x] **API-level provider selection** (`driver_provider`, `swarm_provider` in request body)
+- [x] **Tool calling migration** (proper function calls instead of JSON prompts)
+- [x] GroveEngine integration (frontend at domains.grove.place)
+- [x] Production testing (Worker API tested with Claude + DeepSeek!)
+- [ ] Parallel provider execution (both providers simultaneously) - *nice to have*
 - [ ] Documentation updates
 
 ## Testing - COMPLETE
@@ -127,9 +131,19 @@ POST /api/search
     "tld_preferences": ["com", "co", "io", "app", "dev"],
     "vibe": "creative",
     "keywords": "fresh baked goods"
-  }
+  },
+  "driver_provider": "deepseek",  // optional: claude (default), deepseek, kimi, cloudflare
+  "swarm_provider": "deepseek"    // optional: claude (default), deepseek, kimi, cloudflare
 }
 ```
+
+### Available AI Providers
+| Provider | Model | Cost (In/Out per M tokens) |
+|----------|-------|---------------------------|
+| `claude` | Claude Sonnet 4 | $3.00 / $15.00 |
+| `deepseek` | DeepSeek V3.2 | $0.28 / $0.42 |
+| `kimi` | Kimi K2 | $0.60 / $2.50 |
+| `cloudflare` | Llama 4 Scout | $0.27 / $0.85 |
 
 ---
 
@@ -180,7 +194,51 @@ POST /api/search
 
 ---
 
-*Last updated: 2025-12-06*
+---
+
+## Completed Session 2 (2025-12-06 afternoon)
+
+### Multi-Model Support with Function Calling
+
+Added support for 4 AI providers with proper tool/function calling:
+
+- **Claude Sonnet 4** - Best quality, highest cost ($3.00/$15.00 per M tokens)
+- **DeepSeek V3.2** - Great quality, very low cost ($0.28/$0.42 per M tokens) - TESTED & WORKING
+- **Kimi K2** - Good quality, low cost ($0.60/$2.50 per M tokens)
+- **Cloudflare Llama 4 Scout** - Good quality, lowest cost ($0.27/$0.85 per M tokens)
+
+### Key Changes
+- Created provider abstraction layer (`worker/src/providers/`)
+- Migrated from JSON prompts to proper function/tool calling
+- Added API-level provider selection (`driver_provider`, `swarm_provider`)
+- Frontend can now select AI model per-search without config changes
+
+### Files Created
+- `worker/src/providers/types.ts` - Provider interface
+- `worker/src/providers/anthropic.ts` - Claude provider
+- `worker/src/providers/deepseek.ts` - DeepSeek provider
+- `worker/src/providers/kimi.ts` - Kimi provider
+- `worker/src/providers/cloudflare.ts` - Cloudflare AI provider
+- `worker/src/providers/tools.ts` - Tool definitions
+- `worker/src/providers/index.ts` - Factory function
+
+---
+
+## Remaining Work
+
+### High Priority
+- [ ] Email notifications (Resend integration ready, just needs wiring)
+- [ ] Add AI Model selector to frontend Searcher page
+
+### Nice to Have
+- [ ] Parallel provider execution (run 2 providers simultaneously)
+- [ ] Documentation updates
+- [ ] Follow-up quiz UI (if needed)
+
+---
+
+*Last updated: 2025-12-06 (afternoon session)*
 *73 tests passing (Python)*
 *Worker: https://grove-domain-tool.m7jv4v7npb.workers.dev*
+*Frontend: https://domains.grove.place*
 *CLI: `grove-domain-tool search "Business Name" --batches 2`*

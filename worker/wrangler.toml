@@ -12,6 +12,12 @@ class_name = "SearchJobDO"
 [ai]
 binding = "AI"
 
+# D1 Database binding for job index
+[[d1_databases]]
+binding = "DB"
+database_name = "grove-domain-jobs"
+database_id = "cd493112-a901-4f6d-aadf-a5ca78929557"
+
 # Migrations for Durable Objects
 [[migrations]]
 tag = "v1"

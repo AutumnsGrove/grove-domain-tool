@@ -10,6 +10,9 @@ export interface Env {
   // Durable Object bindings
   SEARCH_JOB: DurableObjectNamespace;
 
+  // D1 Database for job index
+  DB: D1Database;
+
   // AI binding (for Cloudflare Workers AI)
   AI?: Ai;
 

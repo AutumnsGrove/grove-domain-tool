@@ -179,6 +179,9 @@ export class SearchJobDO implements DurableObject {
         this.updateJobStatus("needs_followup");
         console.log(`Max batches reached, needs follow-up`);
 
+        // Generate follow-up quiz
+        await this.generateFollowupQuiz(updatedJob);
+
         // Send follow-up email if client_email is provided
         await this.sendFollowupQuizEmail(updatedJob);
       } else {
@@ -1063,6 +1066,77 @@ export class SearchJobDO implements DurableObject {
     } catch (error) {
       console.error("Failed to send follow-up email:", error);
       // Don't fail the job if email fails
+    }
+  }
+
+  /**
+   * Generate follow-up quiz when search needs refinement
+   */
+  private async generateFollowupQuiz(job: SearchJob): Promise<void> {
+    console.log(`[Followup] Generating follow-up quiz for job ${job.id}`);
+    
+    try {
+      // Get search context
+      const domainsChecked = this.getTotalDomainsChecked();
+      const goodResults = this.getGoodResultsCount();
+      const availableDomains = this.getAvailableDomains();
+      const checkedDomains = this.getCheckedDomains();
+      const targetResults = parseInt(this.env.TARGET_RESULTS || "25", 10);
+
+      // Create follow-up quiz based on search results
+      const followupQuiz = {
+        job_id: job.id,
+        questions: [
+          {
+            id: "followup_direction",
+            type: "single_select" as const,
+            prompt: "Your preferred name wasn't available. What would you like to try?",
+            required: true,
+            options: [
+              { value: "variation", label: "Try variations of the same name" },
+              { value: "different_tld", label: "Try different domain endings (.co, .io, etc.)" },
+              { value: "new_name", label: "Explore completely different names" },
+            ],
+          },
+          {
+            id: "followup_length",
+            type: "single_select" as const,
+            prompt: "Short names are mostly taken. What's your preference?",
+            required: true,
+            options: [
+              { value: "keep_short", label: "Keep trying for short names" },
+              { value: "longer_ok", label: "Longer, more descriptive names are fine" },
+              { value: "compound", label: "Try compound words or phrases" },
+            ],
+          },
+          {
+            id: "followup_keywords",
+            type: "text" as const,
+            prompt: "Any new keywords or themes to explore?",
+            required: false,
+            placeholder: "e.g., local, artisan, modern",
+          },
+        ],
+        context: {
+          batches_completed: job.batch_num,
+          domains_checked: domainsChecked,
+          good_found: goodResults,
+          target: targetResults,
+        },
+      };
+
+      // Save as artifact
+      this.saveArtifact({
+        batch_num: job.batch_num,
+        artifact_type: "followup_quiz",
+        content: JSON.stringify(followupQuiz),
+      });
+
+      console.log(`[Followup] Generated follow-up quiz with ${followupQuiz.questions.length} questions`);
+    } catch (error) {
+      console.error(`[Followup] Failed to generate follow-up quiz:`, error);
+      // Don't fail the job if quiz generation fails - just log the error
+      // The frontend will handle the missing quiz gracefully
     }
   }
 }

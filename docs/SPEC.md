@@ -1,6 +1,10 @@
-# GroveDomainTool
+# Acorn
 
 > AI-powered asynchronous domain availability checker that reduces domain hunting from weeks to hours.
+>
+> *Every oak was once an acorn.*
+
+**Internal codename:** GroveDomainTool
 
 ---
 

@@ -4,6 +4,18 @@
 
 ---
 
+## Project Naming
+
+| | |
+|---|---|
+| **Public name** | Acorn |
+| **Internal codename** | GroveDomainTool |
+| **Domain** | acorn.grove.place |
+
+*Part of the Grove ecosystem. "Every oak was once an acorn."*
+
+---
+
 ## Project Purpose
 
 AI-powered asynchronous domain availability checker that reduces domain hunting from weeks to hours. Orchestrates AI agents to generate, check, and evaluate domain name candidates for client consultations. Runs autonomously in the background, producing a curated list of ~25 available, affordable domain options.

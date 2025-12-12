@@ -1021,7 +1021,7 @@ export class SearchJobDO implements DurableObject {
       }));
 
       // Build URLs
-      const baseUrl = "https://domains.grove.place";
+      const baseUrl = "https://acorn.grove.place";
       const resultsUrl = `${baseUrl}/results/${job.id}`;
       const bookingUrl = `${baseUrl}/booking`;
 
@@ -1051,7 +1051,7 @@ export class SearchJobDO implements DurableObject {
     }
 
     try {
-      const baseUrl = "https://domains.grove.place";
+      const baseUrl = "https://acorn.grove.place";
       const quizUrl = `${baseUrl}/followup/${job.id}`;
 
       await sendFollowupEmail(this.env.RESEND_API_KEY, {

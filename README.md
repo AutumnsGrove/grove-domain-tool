@@ -1,12 +1,16 @@
-# GroveDomainTool
+# Acorn
 
 > AI-powered domain discovery that reduces domain hunting from weeks to hours.
+>
+> *Every oak was once an acorn.*
+
+**Internal codename:** GroveDomainTool
 
 ## Overview
 
 An autonomous tool that orchestrates AI agents to generate, evaluate, and check domain name availability. Runs in the background via Cloudflare Durable Objects, producing a curated list of 25+ available, affordable domain options.
 
-**Live:** [domains.grove.place](https://domains.grove.place)
+**Live:** [acorn.grove.place](https://acorn.grove.place)
 
 ## Features
 

@@ -1,4 +1,6 @@
-# GroveDomainTool TODOs
+# Acorn TODOs
+
+**Internal codename:** GroveDomainTool
 
 ## Phase 1: Extraction & Core - COMPLETE
 - [x] Extract domain_checker.py to standalone package
@@ -58,7 +60,7 @@
 - [x] **Multi-model support with function calling** (DeepSeek V3.2, Kimi K2, Cloudflare Llama 4 Scout)
 - [x] **API-level provider selection** (`driver_provider`, `swarm_provider` in request body)
 - [x] **Tool calling migration** (proper function calls instead of JSON prompts)
-- [x] GroveEngine integration (frontend at domains.grove.place)
+- [x] GroveEngine integration (frontend at acorn.grove.place)
 - [x] Production testing (Worker API tested with Claude + DeepSeek!)
 - [ ] Parallel provider execution (both providers simultaneously) - *nice to have*
 - [ ] Documentation updates
@@ -186,7 +188,7 @@ POST /api/search
 - Rate limiting settings
 - API usage limits/warnings
 
-### 4. Integrate with domains.grove.place
+### 4. Integrate with acorn.grove.place
 - Website needs to poll `/api/status` or connect to `/api/stream`
 - Show real-time progress as search runs
 - Display results when complete

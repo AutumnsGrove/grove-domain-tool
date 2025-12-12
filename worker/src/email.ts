@@ -16,7 +16,7 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-  from: string = "Grove Domain Search <domains@grove.place>"
+  from: string = "Acorn <domains@grove.place>"
 ): Promise<{ id: string }> {
   const response = await fetch(RESEND_API_URL, {
     method: "POST",
@@ -132,7 +132,7 @@ ${domainSection("PREMIUM (worth considering)", "💎", premium)}
 └──────────────────────────────────────────────────────────────┘
     </div>
     <div class="footer">
-grove.place • domain setup • ${new Date().toISOString().split("T")[0]}
+Acorn by grove.place • ${new Date().toISOString().split("T")[0]}
     </div>
   </div>
 </body>
@@ -210,7 +210,7 @@ export function generateFollowupEmail(data: FollowupEmailData): string {
 └──────────────────────────────────────────────────────────────┘
     </div>
     <div class="footer">
-grove.place • domain setup • ${new Date().toISOString().split("T")[0]}
+Acorn by grove.place • ${new Date().toISOString().split("T")[0]}
     </div>
   </div>
 </body>
